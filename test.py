@@ -1,11 +1,7 @@
-class A:
-    a = 7
-    b = 3
-    @staticmethod
-    def seta(a):
-        a = a
+import random
 
-a = A()
-a.seta(78)
+l = [1, 5, 7, 9, 4, 10]
 
-print(A.a)
+print(random.choice(l))
+
+print(random.choice(l))
