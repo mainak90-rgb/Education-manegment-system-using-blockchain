@@ -1,9 +1,9 @@
 import hashlib
 import json
 import datetime
+import random
 
-# from uuid import uuid4
-# from urllib.parse import urlparse
+from flask import Flask, jsonify, request
 
 validity_dict = {
     "t1": ["cse", "Teacher"],
@@ -58,7 +58,8 @@ class Blockchain:
         encoded_block = json.dumps(block, sort_keys=True).encode()
         return hashlib.sha256(encoded_block).hexdigest()
 
-    def is_valid(self, transaction):
+    def is_valid(self):
+        transaction = self.transactions[-1]
         if validity_dict[transaction["sender"]][1] == "Student":
             return False
         if validity_dict[transaction["sender"]][1] == "Teacher":
@@ -82,3 +83,65 @@ class Blockchain:
 
     def add_transaction(self, transaction):
         self.transactions.append(transaction)
+
+
+pos_miners = []
+miners = set()
+blockchain = Blockchain()
+
+app = Flask(__name__)
+
+id = None
+
+
+def select_miner():
+    return random.choice(pos_miners)
+
+
+@app.route("/make_transaction", methods=['POST'])
+def make_transaction():
+    if not id or validity_dict[id][1] == "Student":
+        return 'You are not eligible for this request', 400
+    json = request.get_json()
+    transaction_keys = ['sender', 'receiver', 'amount']
+    if not all(key in json for key in transaction_keys):
+        return 'Some elements are missing', 400
+    blockchain.add_transaction(json)
+    miners.add(select_miner())
+    response = {'Message': f'This transaction will be added to block after verification.'}
+    return jsonify(response), 201
+
+
+@app.route('/get_chain')
+def get_chain():
+    response = {'chain': blockchain.chain,
+                'length': len(blockchain.chain)
+                }
+    return jsonify(response), 200
+
+
+@app.route("/mine_block")
+def mine_block():
+    if not id or validity_dict[id][1] not in miners:
+        return 'You are not eligible for this request', 400
+    miners.remove(validity_dict[id][1])
+
+    if not blockchain.is_valid():
+        return jsonify({'Message': f'Last transaction is not valid.'}), 200
+
+    previous_block = blockchain.get_previous_block()
+
+    previous_proof = previous_block['proof']
+    proof = blockchain.proof_of_work(previous_proof)
+
+    previous_hash = blockchain.hash(previous_block)
+
+    block = blockchain.create_block(proof, previous_hash)
+
+    response = {'message': 'Congrats, You mined a block',
+                'index': block['index'],
+                'timestamp': block['timestamp'],
+                'proof': block['proof'],
+                'previous_hash': block['previous_hash'],
+                'transaction': block['transaction']}
+    return jsonify(response), 200
