@@ -1,7 +1,19 @@
-import random
+from flask import Flask, redirect, url_for, request, abort
 
-l = [1, 5, 7, 9, 4, 10]
+app = Flask(__name__)
 
-print(random.choice(l))
 
-print(random.choice(l))
+@app.route('/', methods=["GET", "POST"])
+def hello():
+    if request.method == "GET":
+        return "Hello World !!!"
+    else:
+        return "No Hello World !!!"
+
+
+@app.route('/user')
+def user():
+    return redirect(url_for('hello'))
+
+
+app.run()

@@ -2,8 +2,9 @@ import hashlib
 import json
 import datetime
 import random
+import requests
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, redirect, url_for
 
 validity_dict = {
     "t1": ["cse", "Teacher"],
@@ -16,6 +17,17 @@ validity_dict = {
     "ad": [None, "Admin"]
 }
 
+host_dict = {
+    "t1": ["127.0.0.1", "5000"],
+    "t2": ["127.0.0.1", "5001"],
+    "t3": ["127.0.0.1", "5002"],
+    "s1": ["127.0.0.1", "5003"],
+    "s2": ["127.0.0.1", "5004"],
+    "s3": ["127.0.0.1", "5005"],
+    "pr": ["127.0.0.1", "5006"],
+    "ad": ["127.0.0.1", "5007"]
+}
+
 
 class Blockchain:
     def __init__(self):
@@ -24,7 +36,14 @@ class Blockchain:
         # self.block = []
         # self.block_size = 3
 
-        self.create_block(proof=1, previous_hash='0')
+        if id == "ad":
+            block = {'index': len(self.chain) + 1,
+                     'timestamp': str(datetime.datetime.now()),
+                     'proof': 1,
+                     'previous_hash': 0,
+                     'transaction': self.transactions
+                     }
+            self.chain.append(block)
 
     def create_block(self, proof, previous_hash):
         block = {'index': len(self.chain) + 1,
@@ -112,12 +131,17 @@ def make_transaction():
     return jsonify(response), 201
 
 
-@app.route('/get_chain')
+@app.route('/get_chain', methods=["GET", "POST"])
 def get_chain():
     response = {'chain': blockchain.chain,
                 'length': len(blockchain.chain)
                 }
-    return jsonify(response), 200
+    if request.method == "GET":
+        return jsonify(response), 200
+    else:
+        addr = request.remote_addr
+        requests.post(addr, json=response)
+        return jsonify(response), 200
 
 
 @app.route("/mine_block")
@@ -144,4 +168,27 @@ def mine_block():
                 'proof': block['proof'],
                 'previous_hash': block['previous_hash'],
                 'transaction': block['transaction']}
+    r ={'chain': block,
+        'length': len(blockchain.chain)
+        }
+    for i in host_dict.values():
+        requests.post(i[0]+":"+i[1], json=r)
+
     return jsonify(response), 200
+
+
+@app.route("/add_chain", methods=["GET", "POST"])
+def add_chain():
+    if request.method == "GET":
+        requests.post("127.0.0.1:5007")
+        return jsonify({"Request send"}), 200
+    else:
+        js = request.get_json()
+        blockchain.chain.append(js["chain"])
+        return jsonify(js), 200
+
+
+def run(host, port, _id):
+    global id
+    id = _id
+    app.run(host=host, port=port)
