@@ -4,7 +4,7 @@ import datetime
 import random
 import requests
 
-from flask import Flask, jsonify, request, redirect, url_for
+from flask import Flask, jsonify, request
 
 validity_dict = {
     "t1": ["cse", "Teacher"],
@@ -21,9 +21,9 @@ host_dict = {
     "t1": ["127.0.0.1", "5000"],
     "t2": ["127.0.0.1", "5001"],
     "t3": ["127.0.0.1", "5002"],
-    "s1": ["127.0.0.1", "5003"],
-    "s2": ["127.0.0.1", "5004"],
-    "s3": ["127.0.0.1", "5005"],
+    # "s1": ["127.0.0.1", "5003"],
+    # "s2": ["127.0.0.1", "5004"],
+    # "s3": ["127.0.0.1", "5005"],
     "pr": ["127.0.0.1", "5006"],
     "ad": ["127.0.0.1", "5007"]
 }
@@ -35,15 +35,6 @@ class Blockchain:
         self.transactions = []
         # self.block = []
         # self.block_size = 3
-
-        if id == "ad":
-            block = {'index': len(self.chain) + 1,
-                     'timestamp': str(datetime.datetime.now()),
-                     'proof': 1,
-                     'previous_hash': 0,
-                     'transaction': self.transactions
-                     }
-            self.chain.append(block)
 
     def create_block(self, proof, previous_hash):
         block = {'index': len(self.chain) + 1,
@@ -104,7 +95,7 @@ class Blockchain:
         self.transactions.append(transaction)
 
 
-pos_miners = []
+pos_miners = {"t1", "t2", "t3", "pr", "ad"}
 miners = set()
 blockchain = Blockchain()
 
@@ -113,8 +104,8 @@ app = Flask(__name__)
 id = None
 
 
-def select_miner():
-    return random.choice(pos_miners)
+def select_miner(sender, receiver):
+    return random.choice(list(pos_miners - {sender, receiver}))
 
 
 @app.route("/make_transaction", methods=['POST'])
@@ -122,33 +113,45 @@ def make_transaction():
     if not id or validity_dict[id][1] == "Student":
         return 'You are not eligible for this request', 400
     json = request.get_json()
-    transaction_keys = ['sender', 'receiver', 'amount']
+    transaction_keys = ['sender', 'receiver', 'type']
     if not all(key in json for key in transaction_keys):
         return 'Some elements are missing', 400
     blockchain.add_transaction(json)
-    miners.add(select_miner())
-    response = {'Message': f'This transaction will be added to block after verification.'}
-    return jsonify(response), 201
+    miner = select_miner(json["sender"], json["receiver"])
+    miners.add(miner)
+    response = {'Message': f'This transaction will be added to block after verification.',
+                'Miner': miner}
+    r = {'miner': miner}
+    r1 = {'chain': blockchain.chain,
+          'transaction': blockchain.transactions,
+          'length': len(blockchain.chain)
+          }
+    for i in host_dict.values():
+        requests.post("http://" + i[0] + ":" + i[1] + "/miner", json=r)
+        requests.post("http://" + i[0] + ":" + i[1] + "/add_chain", json=r1)
+    return jsonify(response), 200
 
 
 @app.route('/get_chain', methods=["GET", "POST"])
 def get_chain():
     response = {'chain': blockchain.chain,
+                'transaction': blockchain.transactions,
                 'length': len(blockchain.chain)
                 }
     if request.method == "GET":
         return jsonify(response), 200
     else:
-        addr = request.remote_addr
-        requests.post(addr, json=response)
+        js = request.get_json()
+        ip, port = host_dict[js["id"]][0], host_dict[js["id"]][1]
+        requests.post("http://" + ip + ":" + port + "/add_chain", json=response)
         return jsonify(response), 200
 
 
 @app.route("/mine_block")
 def mine_block():
-    if not id or validity_dict[id][1] not in miners:
+    if not id or id not in miners:
         return 'You are not eligible for this request', 400
-    miners.remove(validity_dict[id][1])
+    miners.remove(id)
 
     if not blockchain.is_valid():
         return jsonify({'Message': f'Last transaction is not valid.'}), 200
@@ -168,23 +171,41 @@ def mine_block():
                 'proof': block['proof'],
                 'previous_hash': block['previous_hash'],
                 'transaction': block['transaction']}
-    r ={'chain': block,
-        'length': len(blockchain.chain)
-        }
+    r = {'chain': blockchain.chain,
+         'length': len(blockchain.chain),
+         'transaction': blockchain.transactions
+         }
     for i in host_dict.values():
-        requests.post(i[0]+":"+i[1], json=r)
+        requests.post("http://" + i[0] + ":" + i[1], json=r)
 
     return jsonify(response), 200
+
+
+@app.route("/miner", methods=["POST"])
+def miner():
+    js = request.get_json()
+    miners.add(js["miner"])
+    return js
 
 
 @app.route("/add_chain", methods=["GET", "POST"])
 def add_chain():
     if request.method == "GET":
-        requests.post("127.0.0.1:5007")
-        return jsonify({"Request send"}), 200
+        if id == "ad":
+            block = {'index': len(blockchain.chain) + 1,
+                     'timestamp': str(datetime.datetime.now()),
+                     'proof': 1,
+                     'previous_hash': 0,
+                     'transaction': blockchain.transactions
+                     }
+            blockchain.chain.append(block)
+            return jsonify(block), 200
+        requests.post("http://127.0.0.1:5007/get_chain", json={"id": id})
+        return jsonify({"massage": "Request send"}), 200
     else:
         js = request.get_json()
-        blockchain.chain.append(js["chain"])
+        blockchain.chain = js["chain"]
+        blockchain.transactions = js["transaction"]
         return jsonify(js), 200
 
 

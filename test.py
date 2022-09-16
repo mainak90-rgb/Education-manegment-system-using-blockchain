@@ -1,19 +1,11 @@
-from flask import Flask, redirect, url_for, request, abort
-
-app = Flask(__name__)
-
-
-@app.route('/', methods=["GET", "POST"])
-def hello():
-    if request.method == "GET":
-        return "Hello World !!!"
-    else:
-        return "No Hello World !!!"
-
-
-@app.route('/user')
-def user():
-    return redirect(url_for('hello'))
-
-
-app.run()
+validity_dict = {
+    "t1": ["cse", "Teacher"],
+    "t2": ["ee", "Teacher"],
+    "t3": ["ece", "Teacher"],
+    "s1": ["cse", "Student"],
+    "s2": ["ee", "Student"],
+    "s3": ["ece", "Student"],
+    "pr": ["ece", "Principal"],
+    "ad": [None, "Admin"]
+}
+print(validity_dict["t1"][1])
