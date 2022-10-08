@@ -3,6 +3,7 @@ import json
 import datetime
 import random
 import requests
+import smart_contract
 
 from flask import Flask, jsonify, request
 
@@ -37,18 +38,21 @@ class Blockchain:
         # self.block_size = 3
 
     def create_block(self, proof, previous_hash):
+        transaction = self.transactions.pop()
+        sc = smart_contract.records(validity_dict[transaction["receiver"]][1], transaction.get("type"), transaction.get("marks"),
+                                    transaction.get("ECA"))
         block = {'index': len(self.chain) + 1,
                  'timestamp': str(datetime.datetime.now()),
                  'proof': proof,
                  'previous_hash': previous_hash,
-                 'transaction': self.transactions.pop()
+                 'transaction': transaction
                  }
         # if len(self.block)>0:
         #     self.block.append(bl)
         # else:
 
         self.chain.append(block)
-        return block
+        return block, sc
 
     def get_previous_block(self):
         return self.chain[-1]
@@ -117,19 +121,40 @@ def make_transaction():
     if not all(key in json for key in transaction_keys):
         return 'Some elements are missing', 400
     blockchain.add_transaction(json)
-    miner = select_miner(json["sender"], json["receiver"])
-    miners.add(miner)
-    response = {'Message': f'This transaction will be added to block after verification.',
-                'Miner': miner}
-    r = {'miner': miner}
+    r = {'sender': json["sender"],
+         'receiver': json["receiver"],
+         'transaction': blockchain.transactions
+         }
+    requests.post("http://127.0.0.1:5007/get_miner", json=r)
+
+    response = {'Message': f'This transaction will be added to block after verification.'}
+
+    return jsonify(response), 200
+
+
+@app.route("/get_miner", methods=["GET", "POST"])
+def get_miner():
+    if request.method == "GET":
+        r = {}
+        for i,m in enumerate(miners):
+            r["miner-"+str(i)] = m
+
+        return jsonify(r), 200
+
+    js = request.get_json()
+    mine = select_miner(js["sender"], js["receiver"])
+    miners.add(mine)
+    print(mine)
+    r = {'miner': mine}
     r1 = {'chain': blockchain.chain,
-          'transaction': blockchain.transactions,
+          'transaction': js['transaction'],
           'length': len(blockchain.chain)
           }
     for i in host_dict.values():
         requests.post("http://" + i[0] + ":" + i[1] + "/miner", json=r)
         requests.post("http://" + i[0] + ":" + i[1] + "/add_chain", json=r1)
-    return jsonify(response), 200
+
+    return jsonify(r), 200
 
 
 @app.route('/get_chain', methods=["GET", "POST"])
@@ -152,7 +177,9 @@ def mine_block():
     if not id or id not in miners:
         return 'You are not eligible for this request', 400
     miners.remove(id)
-
+    r = {'miner': 'POP'}
+    for i in host_dict.values():
+        requests.post("http://" + i[0] + ":" + i[1] + "/miner", json=r)
     if not blockchain.is_valid():
         return jsonify({'Message': f'Last transaction is not valid.'}), 200
 
@@ -163,14 +190,15 @@ def mine_block():
 
     previous_hash = blockchain.hash(previous_block)
 
-    block = blockchain.create_block(proof, previous_hash)
+    block, sc = blockchain.create_block(proof, previous_hash)
 
     response = {'message': 'Congrats, You mined a block',
                 'index': block['index'],
                 'timestamp': block['timestamp'],
                 'proof': block['proof'],
                 'previous_hash': block['previous_hash'],
-                'transaction': block['transaction']}
+                'transaction': block['transaction'],
+                'Result': sc}
     r = {'chain': blockchain.chain,
          'length': len(blockchain.chain),
          'transaction': blockchain.transactions
@@ -184,7 +212,10 @@ def mine_block():
 @app.route("/miner", methods=["POST"])
 def miner():
     js = request.get_json()
-    miners.add(js["miner"])
+    if js["miner"] == 'POP':
+        miners.remove(js["miner"])
+    else:
+        miners.add(js["miner"])
     return js
 
 
