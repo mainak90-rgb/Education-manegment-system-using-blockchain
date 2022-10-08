@@ -4,6 +4,7 @@ import datetime
 import random
 import requests
 import smart_contract
+import db
 
 from flask import Flask, jsonify, request
 
@@ -145,7 +146,8 @@ def get_miner():
     mine = select_miner(js["sender"], js["receiver"])
     miners.add(mine)
     print(mine)
-    r = {'miner': mine}
+    r = {'miner': mine,
+         'POP': False}
     r1 = {'chain': blockchain.chain,
           'transaction': js['transaction'],
           'length': len(blockchain.chain)
@@ -177,7 +179,8 @@ def mine_block():
     if not id or id not in miners:
         return 'You are not eligible for this request', 400
     miners.remove(id)
-    r = {'miner': 'POP'}
+    r = {'miner': id,
+         'POP':True}
     for i in host_dict.values():
         requests.post("http://" + i[0] + ":" + i[1] + "/miner", json=r)
     if not blockchain.is_valid():
@@ -206,13 +209,15 @@ def mine_block():
     for i in host_dict.values():
         requests.post("http://" + i[0] + ":" + i[1], json=r)
 
+    db.add_result(block['transaction']["roll"], block['transaction']["paper_code"], block['transaction']["sem"], block['transaction']["res"])
+
     return jsonify(response), 200
 
 
 @app.route("/miner", methods=["POST"])
 def miner():
     js = request.get_json()
-    if js["miner"] == 'POP':
+    if js["POP"]:
         miners.remove(js["miner"])
     else:
         miners.add(js["miner"])
