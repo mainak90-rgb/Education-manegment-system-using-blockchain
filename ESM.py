@@ -3,24 +3,13 @@ import json
 import datetime
 import random
 import requests
-import smart_contract
 import Db
 
 from flask import Flask, jsonify, request
 
-validity_dict = {
-    "t1": ["cse", "Teacher"],
-    "t2": ["ee", "Teacher"],
-    "t3": ["ece", "Teacher"],
-    "s1": ["cse", "Student"],
-    "s2": ["ee", "Student"],
-    "s3": ["ece", "Student"],
-    "pr": ["ece", "Principal"],
-    "ad": [None, "Admin"]
-}
 
 host_dict = {
-
+    "admin": ["127.0.0.1", "5007"]
 }
 
 
@@ -33,9 +22,6 @@ class Blockchain:
 
     def create_block(self, proof, previous_hash):
         transaction = self.transactions.pop()
-        sc = smart_contract.records(validity_dict[transaction["receiver"]][1], transaction.get("type"),
-                                    transaction.get("marks"),
-                                    transaction.get("ECA"))
         block = {'index': len(self.chain) + 1,
                  'timestamp': str(datetime.datetime.now()),
                  'proof': proof,
@@ -47,7 +33,7 @@ class Blockchain:
         # else:
 
         self.chain.append(block)
-        return block, sc
+        return block
 
     def get_previous_block(self):
         return self.chain[-1]
@@ -68,6 +54,7 @@ class Blockchain:
         return hashlib.sha256(encoded_block).hexdigest()
 
     def is_valid(self):
+
         return True
 
     def add_transaction(self, transaction):
@@ -90,7 +77,8 @@ def select_miner(sender, receiver):
 
 @app.route("/make_transaction", methods=['POST'])
 def make_transaction():
-    if not id or validity_dict[id][1] == "Student":
+    user = Db.find_one({'id': id}, 'Users')
+    if user['user'] == "Student":
         return 'You are not eligible for this request', 400
     json = request.get_json()
     transaction_keys = ['receiver', 'type']
@@ -171,15 +159,14 @@ def mine_block():
 
     previous_hash = blockchain.hash(previous_block)
 
-    block, sc = blockchain.create_block(proof, previous_hash)
+    block = blockchain.create_block(proof, previous_hash)
 
     response = {'message': 'Congrats, You mined a block',
                 'index': block['index'],
                 'timestamp': block['timestamp'],
                 'proof': block['proof'],
                 'previous_hash': block['previous_hash'],
-                'transaction': block['transaction'],
-                'Result': sc}
+                'transaction': block['transaction'],}
     r = {'chain': blockchain.chain,
          'length': len(blockchain.chain),
          'transaction': blockchain.transactions
@@ -234,16 +221,18 @@ def register():
     if id != 'admin':
         return "You are not eligible for the request", 400
     js = request.get_json()
-    _type = js.pop('type')
+    _type = js['type']
+    js.pop('type')
     _id = js['id'] if js.get('id') else js['roll']
     if _type == 'Student':
         Db.insert_one(js, 'Student')
     elif _type == 'Teacher':
         Db.insert_one(js, 'Teacher')
     else:
+        print("invalid")
         return "Not valid type", 400
     Db.insert_one(post={"id": _id, "user": _type}, collection="Users")
-    return jsonify(js), 200
+    return "Successfully added to the database", 200
 
 
 def run(_host, _port, _id):

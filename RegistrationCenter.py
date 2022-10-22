@@ -13,7 +13,8 @@ i = 200
 @app.route('/registration', methods=['POST'])
 def registration():
     js = request.get_json()
-    transaction_keys = ['name', 'email', 'dept', 'mobile', 'type']
+    # transaction_keys = ['name', 'email', 'dept', 'mobile', 'type']
+    transaction_keys = ['name', 'type']
     if not all(key in js for key in transaction_keys):
         return 'Some elements are missing', 400
     global rl, i
@@ -36,7 +37,7 @@ def registration():
         js['id'] = _id
 
     requests.post("http://127.0.0.1:5007/register", json=js)
-    return
+    return js
 
 
 if __name__ == '__main__':
