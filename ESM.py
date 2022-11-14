@@ -54,8 +54,15 @@ class Blockchain:
         return hashlib.sha256(encoded_block).hexdigest()
 
     def is_valid(self):
-
-        return True
+        types = Db.find_one(post={"id": id}, collection="Users")
+        typer = Db.find_one(post={"id": self.transactions[-1]['receiver']}, collection="Users")
+        if types == "Teacher" and typer == "Student":
+            return True
+        if types == "Principal" and (typer == "Teacher" or typer == "Student"):
+            return True
+        if types == "Admin":
+            return True
+        return False
 
     def add_transaction(self, transaction):
         self.transactions.append(transaction)
